@@ -20,39 +20,46 @@ def clean():
         mail = imaplib.IMAP4_SSL("imap.gmail.com")
         mail.login(email_addr, password)
 
-        # Először listázzuk a mappákat (debug)
+        # Próbáljuk megtalálni a Spam mappát
         status, folders = mail.list()
-        
-        # Spam keresése Gmail speciális keresővel
-        mail.select('"[Gmail]/All Mail"')  # Összes levél mappa
-        
-        # Keresés a spam címkére
-        status, messages = mail.search(None, 'X-GM-RAW', 'in:spam')
-        
-        if status != "OK" or not messages[0]:
-            # Próbáljuk a sima Spam mappát is
-            for folder in ['"[Gmail]/Spam"', "Spam"]:
-                try:
-                    mail.select(folder)
-                    status, messages = mail.search(None, "ALL")
-                    if status == "OK" and messages[0]:
-                        break
-                except:
-                    continue
+        spam_folder = None
+
+        for folder in folders:
+            folder_name = folder.decode()
+            if "Spam" in folder_name or "Spam" in folder_name:
+                # Kinyerjük a mappa nevét
+                parts = folder_name.split(' "/" ')
+                if len(parts) > 1:
+                    spam_folder = parts[-1].strip('"')
+                    break
+
+        if not spam_folder:
+            # Fallback
+            spam_folder = "[Gmail]/Spam"
+
+        status, _ = mail.select(f'"{spam_folder}"')
+        if status != "OK":
+            # Próbáljuk idézőjelek nélkül
+            status, _ = mail.select(spam_folder)
+
+        if status != "OK":
+            mail.logout()
+            return jsonify({"success": False, "message": f"Nem sikerült megnyitni a Spam mappát: {spam_folder}"})
+
+        status, messages = mail.search(None, "ALL")
 
         if status != "OK" or not messages[0]:
             mail.logout()
-            return jsonify({"success": True, "message": "Nem találtam több spamet."})
+            return jsonify({"success": True, "message": "A Spam mappa üres."})
 
         msg_ids = messages[0].split()
         count = len(msg_ids)
 
         for num in msg_ids:
             try:
-                # Áthelyezés Kukába
                 mail.store(num, '+X-GM-LABELS', '\\Trash')
                 mail.store(num, '+FLAGS', '\\Deleted')
-            except Exception as e:
+            except:
                 pass
 
         mail.expunge()
