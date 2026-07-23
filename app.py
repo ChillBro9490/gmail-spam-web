@@ -22,52 +22,63 @@ def clean():
 
         total_moved = 0
 
-        # 1. módszer: közvetlen Spam mappa
-        possible_spam = ['"[Gmail]/Spam"', "[Gmail]/Spam", "Spam", '"Spam"']
-        
-        for folder in possible_spam:
+        # 1. Klasszikus Spam
+        for folder in ['"[Gmail]/Spam"', "[Gmail]/Spam", "Spam"]:
             try:
                 status, _ = mail.select(folder)
                 if status == "OK":
-                    status, messages = mail.search(None, "ALL")
-                    if status == "OK" and messages[0]:
-                        msg_ids = messages[0].split()
-                        for num in msg_ids:
+                    status, data = mail.uid('search', None, "ALL")
+                    if status == "OK" and data[0]:
+                        for uid in data[0].split():
                             try:
-                                mail.store(num, '+X-GM-LABELS', '\\Trash')
-                                mail.store(num, '+FLAGS', '\\Deleted')
+                                mail.uid('COPY', uid, '[Gmail]/Trash')
+                                mail.uid('STORE', uid, '+FLAGS', '\\Deleted')
                                 total_moved += 1
                             except:
                                 pass
                         mail.expunge()
+                    break
             except:
                 continue
 
-        # 2. módszer: All Mail + in:spam keresés
+        # 2. Social + Promotions kategóriák (All Mail-ből)
         try:
             mail.select('"[Gmail]/All Mail"')
-            status, messages = mail.search(None, 'X-GM-RAW', 'in:spam')
-            if status == "OK" and messages[0]:
-                msg_ids = messages[0].split()
-                for num in msg_ids:
+            
+            # Social
+            status, data = mail.uid('search', None, 'X-GM-RAW', 'category:social')
+            if status == "OK" and data[0]:
+                for uid in data[0].split():
                     try:
-                        mail.store(num, '+X-GM-LABELS', '\\Trash')
-                        mail.store(num, '+FLAGS', '\\Deleted')
+                        mail.uid('COPY', uid, '[Gmail]/Trash')
+                        mail.uid('STORE', uid, '+FLAGS', '\\Deleted')
                         total_moved += 1
                     except:
                         pass
-                mail.expunge()
+
+            # Promotions
+            status, data = mail.uid('search', None, 'X-GM-RAW', 'category:promotions')
+            if status == "OK" and data[0]:
+                for uid in data[0].split():
+                    try:
+                        mail.uid('COPY', uid, '[Gmail]/Trash')
+                        mail.uid('STORE', uid, '+FLAGS', '\\Deleted')
+                        total_moved += 1
+                    except:
+                        pass
+
+            mail.expunge()
         except:
             pass
 
         mail.logout()
 
         if total_moved == 0:
-            return jsonify({"success": True, "message": "Nem találtam több spamet."})
+            return jsonify({"success": True, "message": "Nem találtam több törlendő levelet."})
         else:
             return jsonify({
                 "success": True,
-                "message": f"Kész! {total_moved} darab spam a Kukába került."
+                "message": f"Kész! {total_moved} darab levél a Kukába került."
             })
 
     except Exception as e:
