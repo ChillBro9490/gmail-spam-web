@@ -20,55 +20,55 @@ def clean():
         mail = imaplib.IMAP4_SSL("imap.gmail.com")
         mail.login(email_addr, password)
 
-        # Próbáljuk megtalálni a Spam mappát
-        status, folders = mail.list()
-        spam_folder = None
+        total_moved = 0
 
-        for folder in folders:
-            folder_name = folder.decode()
-            if "Spam" in folder_name or "Spam" in folder_name:
-                # Kinyerjük a mappa nevét
-                parts = folder_name.split(' "/" ')
-                if len(parts) > 1:
-                    spam_folder = parts[-1].strip('"')
-                    break
-
-        if not spam_folder:
-            # Fallback
-            spam_folder = "[Gmail]/Spam"
-
-        status, _ = mail.select(f'"{spam_folder}"')
-        if status != "OK":
-            # Próbáljuk idézőjelek nélkül
-            status, _ = mail.select(spam_folder)
-
-        if status != "OK":
-            mail.logout()
-            return jsonify({"success": False, "message": f"Nem sikerült megnyitni a Spam mappát: {spam_folder}"})
-
-        status, messages = mail.search(None, "ALL")
-
-        if status != "OK" or not messages[0]:
-            mail.logout()
-            return jsonify({"success": True, "message": "A Spam mappa üres."})
-
-        msg_ids = messages[0].split()
-        count = len(msg_ids)
-
-        for num in msg_ids:
+        # 1. módszer: közvetlen Spam mappa
+        possible_spam = ['"[Gmail]/Spam"', "[Gmail]/Spam", "Spam", '"Spam"']
+        
+        for folder in possible_spam:
             try:
-                mail.store(num, '+X-GM-LABELS', '\\Trash')
-                mail.store(num, '+FLAGS', '\\Deleted')
+                status, _ = mail.select(folder)
+                if status == "OK":
+                    status, messages = mail.search(None, "ALL")
+                    if status == "OK" and messages[0]:
+                        msg_ids = messages[0].split()
+                        for num in msg_ids:
+                            try:
+                                mail.store(num, '+X-GM-LABELS', '\\Trash')
+                                mail.store(num, '+FLAGS', '\\Deleted')
+                                total_moved += 1
+                            except:
+                                pass
+                        mail.expunge()
             except:
-                pass
+                continue
 
-        mail.expunge()
+        # 2. módszer: All Mail + in:spam keresés
+        try:
+            mail.select('"[Gmail]/All Mail"')
+            status, messages = mail.search(None, 'X-GM-RAW', 'in:spam')
+            if status == "OK" and messages[0]:
+                msg_ids = messages[0].split()
+                for num in msg_ids:
+                    try:
+                        mail.store(num, '+X-GM-LABELS', '\\Trash')
+                        mail.store(num, '+FLAGS', '\\Deleted')
+                        total_moved += 1
+                    except:
+                        pass
+                mail.expunge()
+        except:
+            pass
+
         mail.logout()
 
-        return jsonify({
-            "success": True,
-            "message": f"Kész! {count} darab spam a Kukába került."
-        })
+        if total_moved == 0:
+            return jsonify({"success": True, "message": "Nem találtam több spamet."})
+        else:
+            return jsonify({
+                "success": True,
+                "message": f"Kész! {total_moved} darab spam a Kukába került."
+            })
 
     except Exception as e:
         return jsonify({"success": False, "message": f"Hiba: {str(e)}"})
