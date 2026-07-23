@@ -20,43 +20,42 @@ def clean():
         mail = imaplib.IMAP4_SSL("imap.gmail.com")
         mail.login(email_addr, password)
 
-        # Próbáljuk többféleképpen a Spam mappát
-        spam_folders = ['"[Gmail]/Spam"', "Spam", "[Gmail]/Spam"]
-        selected = False
-
-        for folder in spam_folders:
-            try:
-                status, _ = mail.select(folder)
-                if status == "OK":
-                    selected = True
-                    break
-            except:
-                continue
-
-        if not selected:
-            mail.logout()
-            return jsonify({"success": False, "message": "Nem sikerült megnyitni a Spam mappát."})
-
-        # Összes levél keresése
-        status, messages = mail.search(None, "ALL")
+        # Először listázzuk a mappákat (debug)
+        status, folders = mail.list()
+        
+        # Spam keresése Gmail speciális keresővel
+        mail.select('"[Gmail]/All Mail"')  # Összes levél mappa
+        
+        # Keresés a spam címkére
+        status, messages = mail.search(None, 'X-GM-RAW', 'in:spam')
         
         if status != "OK" or not messages[0]:
+            # Próbáljuk a sima Spam mappát is
+            for folder in ['"[Gmail]/Spam"', "Spam"]:
+                try:
+                    mail.select(folder)
+                    status, messages = mail.search(None, "ALL")
+                    if status == "OK" and messages[0]:
+                        break
+                except:
+                    continue
+
+        if status != "OK" or not messages[0]:
             mail.logout()
-            return jsonify({"success": True, "message": "A Spam mappa üres."})
+            return jsonify({"success": True, "message": "Nem találtam több spamet."})
 
         msg_ids = messages[0].split()
         count = len(msg_ids)
 
         for num in msg_ids:
             try:
-                # Áthelyezés a Kukába
+                # Áthelyezés Kukába
                 mail.store(num, '+X-GM-LABELS', '\\Trash')
                 mail.store(num, '+FLAGS', '\\Deleted')
-            except:
+            except Exception as e:
                 pass
 
         mail.expunge()
-        mail.close()
         mail.logout()
 
         return jsonify({
@@ -64,8 +63,6 @@ def clean():
             "message": f"Kész! {count} darab spam a Kukába került."
         })
 
-    except imaplib.IMAP4.error as e:
-        return jsonify({"success": False, "message": f"Bejelentkezési hiba: {str(e)}"})
     except Exception as e:
         return jsonify({"success": False, "message": f"Hiba: {str(e)}"})
 
