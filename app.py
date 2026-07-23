@@ -1,6 +1,5 @@
 from flask import Flask, render_template, request, jsonify
 import imaplib
-import os
 
 app = Flask(__name__)
 
@@ -21,12 +20,24 @@ def clean():
         mail = imaplib.IMAP4_SSL("imap.gmail.com")
         mail.login(email_addr, password)
 
-        # Spam mappa
-        status, _ = mail.select('"[Gmail]/Spam"')
-        if status != "OK":
-            # Próbáljuk az angol nevet is
-            mail.select("Spam")
+        # Próbáljuk többféleképpen a Spam mappát
+        spam_folders = ['"[Gmail]/Spam"', "Spam", "[Gmail]/Spam"]
+        selected = False
 
+        for folder in spam_folders:
+            try:
+                status, _ = mail.select(folder)
+                if status == "OK":
+                    selected = True
+                    break
+            except:
+                continue
+
+        if not selected:
+            mail.logout()
+            return jsonify({"success": False, "message": "Nem sikerült megnyitni a Spam mappát."})
+
+        # Összes levél keresése
         status, messages = mail.search(None, "ALL")
         
         if status != "OK" or not messages[0]:
@@ -37,10 +48,15 @@ def clean():
         count = len(msg_ids)
 
         for num in msg_ids:
-            mail.store(num, '+X-GM-LABELS', '\\Trash')
-            mail.store(num, '+FLAGS', '\\Deleted')
+            try:
+                # Áthelyezés a Kukába
+                mail.store(num, '+X-GM-LABELS', '\\Trash')
+                mail.store(num, '+FLAGS', '\\Deleted')
+            except:
+                pass
 
         mail.expunge()
+        mail.close()
         mail.logout()
 
         return jsonify({
