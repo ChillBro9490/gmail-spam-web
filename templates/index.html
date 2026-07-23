@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gmail Spam Tisztító</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #1e1e2e;
+            color: #cdd6f4;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .card {
+            background: #2a2a40;
+            border-radius: 16px;
+            padding: 32px 24px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+        }
+        h1 {
+            text-align: center;
+            font-size: 1.8rem;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #a6adc8;
+            margin-bottom: 28px;
+            font-size: 0.95rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 0.9rem;
+            color: #a6adc8;
+        }
+        input {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            background: #1e1e2e;
+            color: #cdd6f4;
+            font-size: 1rem;
+            margin-bottom: 18px;
+        }
+        input:focus {
+            outline: 2px solid #89b4fa;
+        }
+        button {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            background: #f38ba8;
+            color: #1e1e2e;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        button:hover { opacity: 0.9; }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 14px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+        }
+        .success { background: #a6e3a1; color: #1e1e2e; }
+        .error { background: #f38ba8; color: #1e1e2e; }
+        .info {
+            margin-top: 24px;
+            font-size: 0.8rem;
+            color: #6c7086;
+            text-align: center;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Gmail Spam Tisztító</h1>
+        <p class="subtitle">Spam mappa → Kuka</p>
+
+        <label>Gmail cím</label>
+        <input type="email" id="email" placeholder="te@gmail.com">
+
+        <label>Alkalmazásjelszó</label>
+        <input type="password" id="password" placeholder="16 karakteres jelszó">
+
+        <button id="btn" onclick="cleanSpam()">Spam → Kuka</button>
+
+        <div id="result" class="result"></div>
+
+        <p class="info">
+            Az alkalmazásjelszót a Google fiókodban tudod létrehozni<br>
+            (Biztonság → Alkalmazásjelszavak)
+        </p>
+    </div>
+
+    <script>
+        async function cleanSpam() {
+            const email = document.getElementById("email").value.trim();
+            const password = document.getElementById("password").value.trim();
+            const btn = document.getElementById("btn");
+            const result = document.getElementById("result");
+
+            if (!email || !password) {
+                showResult("Add meg az emailt és a jelszót!", false);
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerText = "Feldolgozás...";
+            result.style.display = "none";
+
+            try {
+                const res = await fetch("/clean", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                showResult(data.message, data.success);
+            } catch (err) {
+                showResult("Hálózati hiba történt.", false);
+            }
+
+            btn.disabled = false;
+            btn.innerText = "Spam → Kuka";
+        }
+
+        function showResult(msg, success) {
+            const result = document.getElementById("result");
+            result.innerText = msg;
+            result.className = "result " + (success ? "success" : "error");
+            result.style.display = "block";
+        }
+    </script>
+</body>
+</html>
